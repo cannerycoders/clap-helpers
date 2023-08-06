@@ -81,6 +81,12 @@ namespace clap { namespace helpers {
       virtual bool implementsThreadPool() const noexcept { return false; }
       virtual void threadPoolExec(uint32_t taskIndex) noexcept {}
 
+      //-------------------------//
+      // clap_plugin_asyncthread_pool //
+      //-------------------------//
+      virtual bool implementsAsyncThreadPool() const noexcept { return false; }
+      virtual void asyncThreadPoolExec(void *) noexcept {}
+
       //-------------------//
       // clap_plugin_state //
       //-------------------//
@@ -358,6 +364,9 @@ namespace clap { namespace helpers {
       // clap_plugin_thread_pool
       static void clapThreadPoolExec(const clap_plugin *plugin, uint32_t task_index) noexcept;
 
+      // clap_plugin_asyncthread_pool
+      static void clapAsyncThreadPoolExec(const clap_plugin *plugin, void *) noexcept;
+
       // clap_plugin_state
       static bool clapStateSave(const clap_plugin *plugin, const clap_ostream *stream) noexcept;
       static bool clapStateLoad(const clap_plugin *plugin, const clap_istream *stream) noexcept;
@@ -513,6 +522,7 @@ namespace clap { namespace helpers {
       static const clap_plugin_state_context _pluginStateContext;
       static const clap_plugin_tail _pluginTail;
       static const clap_plugin_thread_pool _pluginThreadPool;
+      static const clap_plugin_asyncthread_pool _pluginAsyncThreadPool;
       static const clap_plugin_timer_support _pluginTimerSupport;
       static const clap_plugin_track_info _pluginTrackInfo;
       static const clap_plugin_voice_info _pluginVoiceInfo;

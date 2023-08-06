@@ -21,6 +21,11 @@ namespace clap { namespace helpers {
    };
 
    template <MisbehaviourHandler h, CheckingLevel l>
+   const clap_plugin_asyncthread_pool Plugin<h, l>::_pluginAsyncThreadPool = {
+      clapAsyncThreadPoolExec,
+   };
+
+   template <MisbehaviourHandler h, CheckingLevel l>
    const clap_plugin_state Plugin<h, l>::_pluginState = {
       clapStateSave,
       clapStateLoad,
@@ -453,6 +458,8 @@ namespace clap { namespace helpers {
          return &_pluginNoteName;
       if (!strcmp(id, CLAP_EXT_THREAD_POOL) && self.implementsThreadPool())
          return &_pluginThreadPool;
+      if (!strcmp(id, CLAP_EXT_ASYNCTHREAD_POOL) && self.implementsAsyncThreadPool())
+         return &_pluginAsyncThreadPool;
       if (!strcmp(id, CLAP_EXT_TIMER_SUPPORT) && self.implementsTimerSupport())
          return &_pluginTimerSupport;
       if (!strcmp(id, CLAP_EXT_POSIX_FD_SUPPORT) && self.implementsPosixFdSupport())
@@ -547,6 +554,15 @@ namespace clap { namespace helpers {
       auto &self = from(plugin);
 
       self.threadPoolExec(task_index);
+   }
+
+   //-------------------------//
+   // clap_plugin_asyncthread_pool //
+   //-------------------------//
+   template <MisbehaviourHandler h, CheckingLevel l>
+   void Plugin<h, l>::clapAsyncThreadPoolExec(const clap_plugin *plugin, void *task) noexcept {
+      auto &self = from(plugin);
+      self.asyncThreadPoolExec(task);
    }
 
    //-------------------//

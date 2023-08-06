@@ -145,6 +145,12 @@ namespace clap { namespace helpers {
       bool canUseThreadPool() const noexcept;
       bool threadPoolRequestExec(uint32_t numTasks) const noexcept;
 
+      ///////////////////////////
+      // clap_host_asyncthread_pool //
+      ///////////////////////////
+      bool canUseAsyncThreadPool() const noexcept;
+      bool asyncthreadPoolRequestExec(void *) const noexcept;
+
       //////////////////////////
       // clap_host_voice_info //
       //////////////////////////
@@ -190,6 +196,7 @@ namespace clap { namespace helpers {
       const clap_host_log *_hostLog = nullptr;
       const clap_host_thread_check *_hostThreadCheck = nullptr;
       const clap_host_thread_pool *_hostThreadPool = nullptr;
+      const clap_host_asyncthread_pool *_hostAsyncThreadPool = nullptr;
       const clap_host_audio_ports *_hostAudioPorts = nullptr;
       const clap_host_audio_ports_config *_hostAudioPortsConfig = nullptr;
       const clap_host_note_ports *_hostNotePorts = nullptr;

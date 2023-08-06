@@ -15,6 +15,7 @@ namespace clap { namespace helpers {
       getExtension(_hostLog, CLAP_EXT_LOG);
       getExtension(_hostThreadCheck, CLAP_EXT_THREAD_CHECK);
       getExtension(_hostThreadPool, CLAP_EXT_THREAD_POOL);
+      getExtension(_hostAsyncThreadPool, CLAP_EXT_ASYNCTHREAD_POOL);
       getExtension(_hostAudioPorts, CLAP_EXT_AUDIO_PORTS);
       getExtension(_hostAudioPortsConfig, CLAP_EXT_AUDIO_PORTS_CONFIG);
       getExtension(_hostNotePorts, CLAP_EXT_NOTE_PORTS);
@@ -504,6 +505,27 @@ namespace clap { namespace helpers {
       assert(canUseThreadPool());
       ensureAudioThread("thread_pool.request_exec");
       return _hostThreadPool->request_exec(_host, numTasks);
+   }
+
+   ///////////////////////////
+   // clap_host_asyncthread_pool //
+   ///////////////////////////
+   template <MisbehaviourHandler h, CheckingLevel l>
+   bool HostProxy<h, l>::canUseAsyncThreadPool() const noexcept {
+      if (!_hostAsyncThreadPool)
+         return false;
+
+      if (_hostAsyncThreadPool->request_exec)
+         return true;
+
+      hostMisbehaving("clap_host_asyncthread_pool is partially implemented");
+      return false;
+   }
+
+   template <MisbehaviourHandler h, CheckingLevel l>
+   bool HostProxy<h, l>::asyncthreadPoolRequestExec(void *data) const noexcept {
+      assert(canUseAsyncThreadPool());
+      return _hostAsyncThreadPool->request_exec(_host, data);
    }
 
    //////////////////////////

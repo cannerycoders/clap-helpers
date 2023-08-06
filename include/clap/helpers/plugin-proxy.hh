@@ -31,6 +31,7 @@ namespace clap { namespace helpers {
       const clap_plugin_timer_support *_pluginTimerSupport = nullptr;
       const clap_plugin_fd_support *_pluginFdSupport = nullptr;
       const clap_plugin_thread_pool *_pluginThreadPool = nullptr;
+      const clap_plugin_asyncthread_pool *_pluginAsyncThreadPool = nullptr;
       const clap_plugin_preset_load *_pluginPresetLoad = nullptr;
       const clap_plugin_state *_pluginState = nullptr;
    };

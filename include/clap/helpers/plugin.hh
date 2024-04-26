@@ -5,10 +5,11 @@
 #include <mutex>
 #include <queue>
 #include <string>
-#include <string_view>
 #include <vector>
 
-#include <clap/clap.h>
+#include <clap/all.h>
+
+#include "version-check.hh"
 
 #include "checking-level.hh"
 #include "host-proxy.hh"
@@ -55,6 +56,7 @@ namespace clap { namespace helpers {
       virtual void reset() noexcept {}
       virtual void onMainThread() noexcept {}
       virtual const void *extension(const char *id) noexcept { return nullptr; }
+      virtual bool enableDraftExtensions() const noexcept { return false; }
 
       //---------------------//
       // clap_plugin_latency //
@@ -147,8 +149,10 @@ namespace clap { namespace helpers {
       //------------------------------------//
       virtual bool implementsAudioPortsActivation() const noexcept { return false; }
       virtual bool audioPortsActivationCanActivateWhileProcessing() const noexcept { return false; }
-      virtual bool
-      audioPortsActivationSetActive(bool is_input, uint32_t port_index, bool is_active) noexcept {
+      virtual bool audioPortsActivationSetActive(bool is_input,
+                                                 uint32_t port_index,
+                                                 bool is_active,
+                                                 uint32_t sample_size) noexcept {
          return false;
       }
 
@@ -215,8 +219,8 @@ namespace clap { namespace helpers {
       // clap_plugin_note_name //
       //-----------------------//
       virtual bool implementsNoteName() const noexcept { return false; }
-      virtual int noteNameCount() noexcept { return 0; }
-      virtual bool noteNameGet(int index, clap_note_name *noteName) noexcept { return false; }
+      virtual uint32_t noteNameCount() noexcept { return 0; }
+      virtual bool noteNameGet(uint32_t index, clap_note_name *noteName) noexcept { return false; }
 
       //---------------------------//
       // clap_plugin_timer_support //
@@ -228,7 +232,7 @@ namespace clap { namespace helpers {
       // clap_plugin_posix_fd_support //
       //------------------------------//
       virtual bool implementsPosixFdSupport() const noexcept { return false; }
-      virtual void onPosixFd(int fd, int flags) noexcept {}
+      virtual void onPosixFd(int fd, clap_posix_fd_flags_t flags) noexcept {}
 
       //-----------------//
       // clap_plugin_gui //
@@ -265,6 +269,18 @@ namespace clap { namespace helpers {
       virtual bool contextMenuPerform(const clap_context_menu_target_t *target,
                                       clap_id action_id) noexcept {
          return false;
+      }
+
+      //--------------------------------//
+      // clap_plugin_resource_directory //
+      //--------------------------------//
+      virtual bool implementsResourceDirectory() const noexcept { return false; }
+      virtual void resourceDirectorySetDirectory(const char *path, bool isShared) noexcept {}
+      virtual void resourceDirectoryCollect(bool all) noexcept {}
+      virtual uint32_t resourceDirectoryGetFilesCount() const noexcept { return 0; }
+      virtual int32_t
+      resourceDirectoryGetFilePath(uint32_t index, char *path, uint32_t pathSize) const noexcept {
+         return -1;
       }
 
       //------------------------//
@@ -406,7 +422,8 @@ namespace clap { namespace helpers {
       static bool clapAudioPortsActivationSetActive(const clap_plugin_t *plugin,
                                                     bool is_input,
                                                     uint32_t port_index,
-                                                    bool is_active) noexcept;
+                                                    bool is_active,
+                                                    uint32_t sample_size) noexcept;
 
       // clap_plugin_params
       static uint32_t clapParamsCount(const clap_plugin *plugin) noexcept;
@@ -504,6 +521,17 @@ namespace clap { namespace helpers {
                                          const clap_context_menu_target_t *target,
                                          clap_id action_id) noexcept;
 
+      // clap_plugin_resource_directory
+      static void clapResourceDirectorySetDirectory(const clap_plugin_t *plugin,
+                                                    const char *path,
+                                                    bool is_shared) noexcept;
+      static void clapResourceDirectoryCollect(const clap_plugin_t *plugin, bool all) noexcept;
+      static uint32_t clapResourceDirectoryGetFilesCount(const clap_plugin_t *plugin) noexcept;
+      static int32_t clapResourceDirectoryGetFilePath(const clap_plugin_t *plugin,
+                                                      uint32_t index,
+                                                      char *path,
+                                                      uint32_t path_size) noexcept;
+
       // interfaces
       static const clap_plugin_audio_ports _pluginAudioPorts;
       static const clap_plugin_audio_ports_config _pluginAudioPortsConfig;
@@ -527,10 +555,12 @@ namespace clap { namespace helpers {
       static const clap_plugin_track_info _pluginTrackInfo;
       static const clap_plugin_voice_info _pluginVoiceInfo;
       static const clap_plugin_context_menu _pluginContextMenu;
+      static const clap_plugin_resource_directory _pluginResourceDirectory;
 
       // state
       bool _wasInitialized = false;
       bool _isActive = false;
+      bool _isBeingActivated = false;
       bool _isProcessing = false;
       bool _isBeingDestroyed = false;
       double _sampleRate = 0;

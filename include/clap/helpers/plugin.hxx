@@ -1,10 +1,12 @@
 #include <cassert>
 #include <cstring>
+#include <exception>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
 
+#include "host-proxy.hxx"
 #include "plugin.hh"
 
 namespace clap { namespace helpers {
@@ -133,6 +135,14 @@ namespace clap { namespace helpers {
    };
 
    template <MisbehaviourHandler h, CheckingLevel l>
+   const clap_plugin_resource_directory Plugin<h, l>::_pluginResourceDirectory = {
+      clapResourceDirectorySetDirectory,
+      clapResourceDirectoryCollect,
+      clapResourceDirectoryGetFilesCount,
+      clapResourceDirectoryGetFilePath,
+   };
+
+   template <MisbehaviourHandler h, CheckingLevel l>
    const clap_plugin_voice_info Plugin<h, l>::_pluginVoiceInfo = {
       clapVoiceInfoGet,
    };
@@ -203,9 +213,16 @@ namespace clap { namespace helpers {
 
       if (self._isGuiCreated) {
          if (l >= CheckingLevel::Minimal)
-            self._host.pluginMisbehaving("host forgot to destroy the gui");
+            self._host.hostMisbehaving("host forgot to destroy the gui");
          clapGuiDestroy(plugin);
       }
+
+      if (self._isActive) {
+         if (l >= CheckingLevel::Minimal)
+            self._host.hostMisbehaving("host forgot to deactivate the plugin before destroying it");
+         clapDeactivate(plugin);
+      }
+      assert(!self._isActive);
 
       self.runCallbacksOnMainThread();
 
@@ -308,12 +325,15 @@ namespace clap { namespace helpers {
       assert(!self._isActive);
       assert(self._sampleRate == 0);
 
+      self._isBeingActivated = true;
       if (!self.activate(sample_rate, minFrameCount, maxFrameCount)) {
+         self._isBeingActivated = false;
          assert(!self._isActive);
          assert(self._sampleRate == 0);
          return false;
       }
 
+      self._isBeingActivated = false;
       self._isActive = true;
       self._sampleRate = sample_rate;
       return true;
@@ -429,28 +449,34 @@ namespace clap { namespace helpers {
 
       if (!strcmp(id, CLAP_EXT_STATE) && self.implementsState())
          return &_pluginState;
-      if (!strcmp(id, CLAP_EXT_STATE_CONTEXT) && self.implementsStateContext() &&
-          self.implementsState())
+      if (!strcmp(id, CLAP_EXT_STATE_CONTEXT) && self.implementsStateContext() && self.implementsState())
          return &_pluginStateContext;
-      if (!strcmp(id, CLAP_EXT_PRESET_LOAD) && self.implementsPresetLoad())
+      if ((!strcmp(id, CLAP_EXT_PRESET_LOAD) || !strcmp(id, CLAP_EXT_PRESET_LOAD_COMPAT)) &&
+          self.implementsPresetLoad())
          return &_pluginPresetLoad;
       if (!strcmp(id, CLAP_EXT_RENDER) && self.implementsRender())
          return &_pluginRender;
-      if (!strcmp(id, CLAP_EXT_TRACK_INFO) && self.implementsTrackInfo())
+      if ((!strcmp(id, CLAP_EXT_TRACK_INFO) || !strcmp(id, CLAP_EXT_TRACK_INFO_COMPAT)) &&
+          self.implementsTrackInfo())
          return &_pluginTrackInfo;
       if (!strcmp(id, CLAP_EXT_LATENCY) && self.implementsLatency())
          return &_pluginLatency;
       if (!strcmp(id, CLAP_EXT_AUDIO_PORTS) && self.implementsAudioPorts())
          return &_pluginAudioPorts;
-      if (!strcmp(id, CLAP_EXT_AUDIO_PORTS_ACTIVATION) && self.implementsAudioPorts())
+      if ((!strcmp(id, CLAP_EXT_AUDIO_PORTS_ACTIVATION) ||
+           !strcmp(id, CLAP_EXT_AUDIO_PORTS_ACTIVATION_COMPAT)) &&
+          self.implementsAudioPorts())
          return &_pluginAudioPortsActivation;
       if (!strcmp(id, CLAP_EXT_AUDIO_PORTS_CONFIG) && self.implementsAudioPortsConfig())
          return &_pluginAudioPortsConfig;
       if (!strcmp(id, CLAP_EXT_PARAMS) && self.implementsParams())
          return &_pluginParams;
-      if (!strcmp(id, CLAP_EXT_PARAM_INDICATION) && self.implementsParamIndication())
+      if ((!strcmp(id, CLAP_EXT_PARAM_INDICATION) ||
+           !strcmp(id, CLAP_EXT_PARAM_INDICATION_COMPAT)) &&
+          self.implementsParamIndication())
          return &_pluginParamIndication;
-      if (!strcmp(id, CLAP_EXT_REMOTE_CONTROLS) && self.implementRemoteControls())
+      if ((!strcmp(id, CLAP_EXT_REMOTE_CONTROLS) || !strcmp(id, CLAP_EXT_REMOTE_CONTROLS_COMPAT)) &&
+          self.implementRemoteControls())
          return &_pluginRemoteControls;
       if (!strcmp(id, CLAP_EXT_NOTE_PORTS) && self.implementsNotePorts())
          return &_pluginNotePorts;
@@ -470,8 +496,14 @@ namespace clap { namespace helpers {
          return &_pluginVoiceInfo;
       if (!strcmp(id, CLAP_EXT_TAIL) && self.implementsTail())
          return &_pluginTail;
-      if (!strcmp(id, CLAP_EXT_CONTEXT_MENU))
+      if ((!strcmp(id, CLAP_EXT_CONTEXT_MENU) || !strcmp(id, CLAP_EXT_CONTEXT_MENU_COMPAT)) &&
+          self.implementsContextMenu())
          return &_pluginContextMenu;
+
+      if (self.enableDraftExtensions()) {
+         if (!strcmp(id, CLAP_EXT_RESOURCE_DIRECTORY) && self.implementsResourceDirectory())
+            return &_pluginResourceDirectory;
+      }
 
       return self.extension(id);
    }
@@ -485,7 +517,7 @@ namespace clap { namespace helpers {
       self.ensureMainThread("clap_plugin_latency.get");
 
       if (l >= CheckingLevel::Minimal) {
-         if (!self._isActive)
+         if (!self._isActive && !self._isBeingActivated)
             self.hostMisbehaving("It is wrong to query the latency before the plugin is activated, "
                                  "because if the plugin dosen't know the sample rate, it can't "
                                  "know the number of samples of latency.");
@@ -621,9 +653,10 @@ namespace clap { namespace helpers {
       self.ensureMainThread("clap_plugin_preset_load.from_location");
 
       if (l >= CheckingLevel::Minimal) {
-         if (!location) {
+         if (location_kind == CLAP_PRESET_DISCOVERY_LOCATION_FILE && !location) {
             self.hostMisbehaving(
-               "host called clap_plugin_preset_load.from_location with a null uri");
+               "host called clap_plugin_preset_load.from_location with a null uri, for a preset "
+               "with location_kind CLAP_PRESET_DISCOVERY_LOCATION_FILE");
             return false;
          }
       }
@@ -739,7 +772,8 @@ namespace clap { namespace helpers {
    bool Plugin<h, l>::clapAudioPortsActivationSetActive(const clap_plugin_t *plugin,
                                                         bool is_input,
                                                         uint32_t port_index,
-                                                        bool is_active) noexcept {
+                                                        bool is_active,
+                                                        uint32_t sample_size) noexcept {
       auto &self = from(plugin);
       self.ensureMainThread("clap_plugin_audio_ports_activation.set_active");
 
@@ -752,7 +786,7 @@ namespace clap { namespace helpers {
          }
       }
 
-      return self.audioPortsActivationSetActive(is_input, port_index, is_active);
+      return self.audioPortsActivationSetActive(is_input, port_index, is_active, sample_size);
    }
 
    template <MisbehaviourHandler h, CheckingLevel l>
@@ -920,8 +954,8 @@ namespace clap { namespace helpers {
                if (value < info.min_value || info.max_value < value) {
                   std::ostringstream msg;
                   msg << "clap_plugin_params.value_to_text() the value " << value
-                      << " for parameter " << param_id << " is out of bounds: ["
-                         << info.min_value << " .. " << info.max_value << "]";
+                      << " for parameter " << param_id << " is out of bounds: [" << info.min_value
+                      << " .. " << info.max_value << "]";
                   self.hostMisbehaving(msg.str());
                }
             }
@@ -983,7 +1017,7 @@ namespace clap { namespace helpers {
                std::ostringstream msg;
                msg << "clap_plugin_params.text_to_value() produced the value " << value
                    << " for parameter " << param_id << " which is out of bounds: ["
-                         << info.min_value << " .. " << info.max_value << "]";
+                   << info.min_value << " .. " << info.max_value << "]";
                self._host.pluginMisbehaving(msg.str());
             }
          }
@@ -1002,7 +1036,7 @@ namespace clap { namespace helpers {
             continue;
 
          if (info.id == param_id)
-            return i;
+            return static_cast<int32_t>(i);
       }
 
       return -1;
@@ -1589,6 +1623,42 @@ namespace clap { namespace helpers {
       self.ensureMainThread("clap_plugin_context_menu.perform");
 
       return self.contextMenuPerform(target, action_id);
+   }
+
+   //--------------------------------//
+   // clap_plugin_resource_directory //
+   //--------------------------------//
+   template <MisbehaviourHandler h, CheckingLevel l>
+   void Plugin<h, l>::clapResourceDirectorySetDirectory(const clap_plugin_t *plugin,
+                                                        const char *path,
+                                                        bool is_shared) noexcept {
+      auto &self = from(plugin);
+      self.ensureMainThread("clap_plugin_resource_directory.set_directory");
+      self.resourceDirectorySetDirectory(path, is_shared);
+   }
+
+   template <MisbehaviourHandler h, CheckingLevel l>
+   void Plugin<h, l>::clapResourceDirectoryCollect(const clap_plugin_t *plugin, bool all) noexcept {
+      auto &self = from(plugin);
+      self.ensureMainThread("clap_plugin_resource_directory.collect");
+      self.resourceDirectoryCollect(all);
+   }
+
+   template <MisbehaviourHandler h, CheckingLevel l>
+   uint32_t Plugin<h, l>::clapResourceDirectoryGetFilesCount(const clap_plugin_t *plugin) noexcept {
+      auto &self = from(plugin);
+      self.ensureMainThread("clap_plugin_resource_directory.get_files_count");
+      return self.resourceDirectoryGetFilesCount();
+   }
+
+   template <MisbehaviourHandler h, CheckingLevel l>
+   int32_t Plugin<h, l>::clapResourceDirectoryGetFilePath(const clap_plugin_t *plugin,
+                                                          uint32_t index,
+                                                          char *path,
+                                                          uint32_t path_size) noexcept {
+      auto &self = from(plugin);
+      self.ensureMainThread("clap_plugin_resource_directory.get_file_path");
+      return self.resourceDirectoryGetFilePath(index, path, path_size);
    }
 
    /////////////

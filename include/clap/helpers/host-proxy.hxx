@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <exception>
 #include <iostream>
 #include <sstream>
 
@@ -26,12 +27,20 @@ namespace clap { namespace helpers {
       getExtension(_hostGui, CLAP_EXT_GUI);
       getExtension(_hostParams, CLAP_EXT_PARAMS);
       getExtension(_hostTrackInfo, CLAP_EXT_TRACK_INFO);
+      if (!_hostTrackInfo)
+         getExtension(_hostTrackInfo, CLAP_EXT_TRACK_INFO_COMPAT);
       getExtension(_hostState, CLAP_EXT_STATE);
       getExtension(_hostNoteName, CLAP_EXT_NOTE_NAME);
       getExtension(_hostRemoteControls, CLAP_EXT_REMOTE_CONTROLS);
+      if (!_hostRemoteControls)
+         getExtension(_hostRemoteControls, CLAP_EXT_REMOTE_CONTROLS_COMPAT);
       getExtension(_hostVoiceInfo, CLAP_EXT_VOICE_INFO);
       getExtension(_hostContextMenu, CLAP_EXT_CONTEXT_MENU);
+      if (!_hostContextMenu)
+         getExtension(_hostContextMenu, CLAP_EXT_CONTEXT_MENU_COMPAT);
       getExtension(_hostPresetLoad, CLAP_EXT_PRESET_LOAD);
+      if (!_hostPresetLoad)
+         getExtension(_hostPresetLoad, CLAP_EXT_PRESET_LOAD);
    }
 
    template <MisbehaviourHandler h, CheckingLevel l>
@@ -465,14 +474,14 @@ namespace clap { namespace helpers {
    }
 
    template <MisbehaviourHandler h, CheckingLevel l>
-   bool HostProxy<h, l>::posixFdSupportRegister(int fd, int flags) const noexcept {
+   bool HostProxy<h, l>::posixFdSupportRegister(int fd, clap_posix_fd_flags_t flags) const noexcept {
       assert(canUsePosixFdSupport());
       ensureMainThread("posix_fd_support.register");
       return _hostPosixFdSupport->register_fd(_host, fd, flags);
    }
 
    template <MisbehaviourHandler h, CheckingLevel l>
-   bool HostProxy<h, l>::posixFdSupportModify(int fd, int flags) const noexcept {
+   bool HostProxy<h, l>::posixFdSupportModify(int fd, clap_posix_fd_flags_t flags) const noexcept {
       assert(canUsePosixFdSupport());
       ensureMainThread("posix_fd_support.modify");
       return _hostPosixFdSupport->modify_fd(_host, fd, flags);
@@ -597,8 +606,7 @@ namespace clap { namespace helpers {
 
    template <MisbehaviourHandler h, CheckingLevel l>
    bool
-   HostProxy<h, l>::contextMenuPopulate(const clap_host_t *host,
-                                        const clap_context_menu_target_t *target,
+   HostProxy<h, l>::contextMenuPopulate(const clap_context_menu_target_t *target,
                                         const clap_context_menu_builder_t *builder) const noexcept {
       assert(canUseContextMenu());
       ensureMainThread("context_menu.populate");
@@ -606,8 +614,7 @@ namespace clap { namespace helpers {
    }
 
    template <MisbehaviourHandler h, CheckingLevel l>
-   bool HostProxy<h, l>::contextMenuPerform(const clap_host_t *host,
-                                            const clap_context_menu_target_t *target,
+   bool HostProxy<h, l>::contextMenuPerform(const clap_context_menu_target_t *target,
                                             clap_id action_id) const noexcept {
       assert(canUseContextMenu());
       ensureMainThread("context_menu.perform");
@@ -615,15 +622,14 @@ namespace clap { namespace helpers {
    }
 
    template <MisbehaviourHandler h, CheckingLevel l>
-   bool HostProxy<h, l>::contextMenuCanPopup(const clap_host_t *host) const noexcept {
+   bool HostProxy<h, l>::contextMenuCanPopup() const noexcept {
       assert(canUseContextMenu());
       ensureMainThread("context_menu.can_popup");
       return _hostContextMenu->can_popup(_host);
    }
 
    template <MisbehaviourHandler h, CheckingLevel l>
-   bool HostProxy<h, l>::contextMenuPopup(const clap_host_t *host,
-                                          const clap_context_menu_target_t *target,
+   bool HostProxy<h, l>::contextMenuPopup(const clap_context_menu_target_t *target,
                                           int32_t screen_index,
                                           int32_t x,
                                           int32_t y) const noexcept {
@@ -667,5 +673,34 @@ namespace clap { namespace helpers {
       ensureMainThread("preset_load.loaded");
 
       _hostPresetLoad->loaded(_host, location_kind, location, load_key);
+   }
+
+   //////////////////////////////////
+   // clap_host_resource_directory //
+   //////////////////////////////////
+   template <MisbehaviourHandler h, CheckingLevel l>
+   bool HostProxy<h, l>::canUseResourceDirectory() const noexcept {
+      if (!_hostResourceDirectory)
+         return false;
+
+      if (_hostResourceDirectory->request_directory && _hostResourceDirectory->release_directory)
+         return true;
+
+      hostMisbehaving("clap_host_resource_directory is partially implemented");
+      return false;
+   }
+
+   template <MisbehaviourHandler h, CheckingLevel l>
+   bool HostProxy<h, l>::requestDirectory(bool isShared) const noexcept {
+      assert(canUseResourceDirectory());
+      ensureMainThread("resource_directory.request_directory");
+      return _hostResourceDirectory->request_directory(_host, isShared);
+   }
+
+   template <MisbehaviourHandler h, CheckingLevel l>
+   void HostProxy<h, l>::releaseDirectory(bool isShared) const noexcept {
+      assert(canUseResourceDirectory());
+      ensureMainThread("resource_directory.release_directory");
+      _hostResourceDirectory->release_directory(_host, isShared);
    }
 }} // namespace clap::helpers

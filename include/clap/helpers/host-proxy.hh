@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include <clap/clap.h>
+#include <clap/all.h>
 
 #include "checking-level.hh"
 #include "misbehaviour-handler.hh"
@@ -128,8 +128,8 @@ namespace clap { namespace helpers {
       // clap_host_fd_support //
       //////////////////////////
       bool canUsePosixFdSupport() const noexcept;
-      bool posixFdSupportRegister(int fd, int flags) const noexcept;
-      bool posixFdSupportModify(int fd, int flags) const noexcept;
+      bool posixFdSupportRegister(int fd, clap_posix_fd_flags_t flags) const noexcept;
+      bool posixFdSupportModify(int fd, clap_posix_fd_flags_t flags) const noexcept;
       bool posixFdSupportUnregister(int fd) const noexcept;
 
       //////////////////////////////
@@ -161,15 +161,12 @@ namespace clap { namespace helpers {
       // clap_host_context_menu //
       ////////////////////////////
       bool canUseContextMenu() const noexcept;
-      bool contextMenuPopulate(const clap_host_t *host,
-                               const clap_context_menu_target_t *target,
+      bool contextMenuPopulate(const clap_context_menu_target_t *target,
                                const clap_context_menu_builder_t *builder) const noexcept;
-      bool contextMenuPerform(const clap_host_t *host,
-                              const clap_context_menu_target_t *target,
+      bool contextMenuPerform(const clap_context_menu_target_t *target,
                               clap_id action_id) const noexcept;
-      bool contextMenuCanPopup(const clap_host_t *host) const noexcept;
-      bool contextMenuPopup(const clap_host_t *host,
-                            const clap_context_menu_target_t *target,
+      bool contextMenuCanPopup() const noexcept;
+      bool contextMenuPopup(const clap_context_menu_target_t *target,
                             int32_t screen_index,
                             int32_t x,
                             int32_t y) const noexcept;
@@ -186,6 +183,13 @@ namespace clap { namespace helpers {
       void presetLoadLoaded(uint32_t location_kind,
                             const char *location,
                             const char *load_key) const noexcept;
+
+      //////////////////////////////////
+      // clap_host_resource_directory //
+      //////////////////////////////////
+      bool canUseResourceDirectory() const noexcept;
+      bool requestDirectory(bool isShared) const noexcept;
+      void releaseDirectory(bool isShared) const noexcept;
 
    protected:
       void ensureMainThread(const char *method) const noexcept;
